@@ -1,0 +1,83 @@
+{
+    "swagger": "2.0",
+    "info": {
+        "description": "This is a sample api app",
+        "title": "Task API",
+        "contact": {},
+        "version": "2.0"
+    },
+    "host": "localhost:8000",
+    "paths": {
+        "/addTask": {
+            "post": {
+                "description": "adds a task, a task object is required in the body.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "text/plain"
+                ],
+                "tags": [
+                    "POST"
+                ],
+                "summary": "add a task",
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    }
+                }
+            }
+        },
+        "/deleteTask": {
+            "delete": {
+                "description": "Delete any task by an id parameter",
+                "produces": [
+                    "text/plain"
+                ],
+                "tags": [
+                    "DELETE"
+                ],
+                "summary": "Delete a task by Id",
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    }
+                }
+            }
+        },
+        "/tasks": {
+            "get": {
+                "description": "returns task list in json format",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "GET"
+                ],
+                "summary": "Get List of Tasks",
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    }
+                }
+            }
+        },
+        "/updateTask": {
+            "put": {
+                "description": "Update any task by providing a new Task in the body and an id in the parameters",
+                "produces": [
+                    "text/plain"
+                ],
+                "tags": [
+                    "PUT"
+                ],
+                "summary": "Update a task by Id",
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    }
+                }
+            }
+        }
+    }
+}

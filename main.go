@@ -14,6 +14,9 @@ import (
 	//"sync"
 	"time"
 	"strings"
+	//"github.com/go-chi/chi"
+	"github.com/swaggo/http-swagger/v2"
+	_ "github.com/swaggo/http-swagger/example/go-chi/docs"
 )
 
 type Task struct {
@@ -24,7 +27,12 @@ type Task struct {
 }
 var db *sql.DB
 var smallPool chan func()
+//	@title			Task API
+//	@version		2.0
+//	@description	This is a sample api app 
 
+//	@host		localhost:8000
+//	@BasePath	
 func main() {
 	fmt.Println("server is running")
 	connectToDatabase()
@@ -38,14 +46,28 @@ func main() {
 	}
 
 
-	http.HandleFunc("/", getHandler)
+	http.HandleFunc("/tasks", getHandler)
 	http.HandleFunc("/addTask", postHandler)
 	http.HandleFunc("/updateTask", putHandler)
 	http.HandleFunc("/deleteTask", deleteHandler)
-
+	http.HandleFunc("/swagger/*", httpSwagger.Handler(httpSwagger.URL("http://localhost:8000/swagger/doc.json")))
+	//r := chi.NewRouter()
+	//r := chi.NewRouter()
+	// r.Get("/swagger/*", httpSwagger.Handler(
+	// 	httpSwagger.URL("http://localhost:1323/swagger/doc.json"), //The url pointing to API definition
+	// ))
+	//r.Get("", )
     log.Fatal(http.ListenAndServe(":8000", nil))
 }
 
+
+
+//	@Tags			GET
+//	@Summary		Get List of Tasks 
+//	@Description	returns task list in json format
+//	@Produce		json
+//	@Success		200
+//	@Router			/tasks [get]
 func getHandler(rw http.ResponseWriter, req *http.Request) {
 	fmt.Println("get Handler is working")
 	//wg := sync.WaitGroup{}
@@ -100,6 +122,13 @@ func validatePostRequest(req *http.Request)(bool, string){
 	return true, ""
 }
 
+//	@Tags			POST
+//	@Summary		add a task
+//	@Description	adds a task, a task object is required in the body. 
+//	@Accept			json
+//	@Produce		text/plain
+//	@Success		200
+//	@Router			/addTask [POST]
 func postHandler(rw http.ResponseWriter, req *http.Request) {
 	passed, message := validatePostRequest(req)
 	if !passed {
@@ -168,6 +197,12 @@ func validatePutRequest(req *http.Request)(bool, string){
 	return true, ""
 }
 
+//	@Tags			PUT
+//	@Summary		Update a task by Id 
+//	@Description	Update any task by providing a new Task in the body and an id in the parameters
+//	@Produce		text/plain
+//	@Success		200
+//	@Router			/updateTask [PUT]
 func putHandler(rw http.ResponseWriter, req *http.Request) {
 	passed, message := validatePutRequest(req)
 	if !passed {
@@ -203,6 +238,13 @@ func putHandler(rw http.ResponseWriter, req *http.Request) {
 	json.NewEncoder(rw).Encode(rows)
 }
 
+
+//	@Tags			DELETE
+//	@Summary		Delete a task by Id 
+//	@Description	Delete any task by an id parameter
+//	@Produce		text/plain
+//	@Success		200
+//	@Router			/deleteTask [DELETE]
 func deleteHandler(rw http.ResponseWriter, req *http.Request) {
 	// http://localhost:8000?id=1
 	query := req.URL.Query()

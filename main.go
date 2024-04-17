@@ -13,6 +13,7 @@ import (
 	"regexp"
 	//"sync"
 	"time"
+	"strings"
 )
 
 type Task struct {
@@ -67,11 +68,47 @@ func getHandler(rw http.ResponseWriter, req *http.Request) {
 	rw.Write([]byte(fmt.Sprint(tasks)))			
 }
 
-func postHandler(rw http.ResponseWriter, req *http.Request) {
+func validatePostRequest(req *http.Request)(bool, string){
 	body, err := ioutil.ReadAll(req.Body)
 	if err != nil {
 		log.Fatal(err)
+		return false, "ERROR occured while reading the request body"
+	}	
+	
+	// TODO include all special characters with RegexP
+	s := string(body)
+	if(strings.Contains(s, "<") || strings.Contains(s, ">") || strings.Contains(s, "!") || strings.Contains(s, "=")|| strings.Contains(s, "#") || strings.Contains(s, "--")){
+		log.Fatal(err)
+		return false, "ERROR the json file cannot contain special characters"
 	}
+
+	re := regexp.MustCompile(`[a-zA-Z0-9]+`)
+	taskArr := re.FindAllString(s, -1)
+	if(len(taskArr) != 6){
+		log.Fatal(err)
+		return false, "ERROR the json file cannot be read"
+	}
+	title := taskArr[1]	
+	description := taskArr[3]	
+	status := taskArr[5]	
+
+	if(len(title) > 50 || len(description) > 50 || len(status) > 50){
+		log.Fatal(err)
+		return false, "ERROR the fields cannot exceed 50 characters"
+	}
+
+	return true, ""
+}
+
+func postHandler(rw http.ResponseWriter, req *http.Request) {
+	passed, message := validatePostRequest(req)
+	if !passed {
+		http.Error(rw, message, 400)
+		return;
+	}
+
+	body, err := ioutil.ReadAll(req.Body)
+	
 	s := string(body)
 	re := regexp.MustCompile(`[a-zA-Z0-9]+`)
 	taskArr := re.FindAllString(s, -1)
@@ -93,16 +130,61 @@ func postHandler(rw http.ResponseWriter, req *http.Request) {
 	json.NewEncoder(rw).Encode(taskId)	
 }
 
+func validatePutRequest(req *http.Request)(bool, string){
+	body, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		log.Fatal(err)
+		return false, "ERROR occured while reading the request body"
+	}	
+	
+	// TODO include all special characters with RegexP
+	s := string(body)
+	if(strings.Contains(s, "<") || strings.Contains(s, ">") || strings.Contains(s, "!") || strings.Contains(s, "=")|| strings.Contains(s, "#") || strings.Contains(s, "--")){
+		log.Fatal(err)
+		return false, "ERROR the json file cannot contain special characters"
+	}
+
+	re := regexp.MustCompile(`[a-zA-Z0-9]+`)
+	taskArr := re.FindAllString(s, -1)
+	if(len(taskArr) != 8){
+		log.Fatal(err)
+		return false, "ERROR the json file cannot be read"
+	}
+	id := taskArr[1]	
+	title := taskArr[3]	
+	description := taskArr[5]	
+	status := taskArr[7]	
+
+	if _, err := strconv.Atoi(id); err != nil {
+		log.Fatal(err)
+		return false, "Id must be a valid number"
+	}
+
+	if(len(title) > 50 || len(description) > 50 || len(status) > 50){
+		log.Fatal(err)
+		return false, "ERROR the fields cannot exceed 50 characters"
+	}
+
+	return true, ""
+}
+
 func putHandler(rw http.ResponseWriter, req *http.Request) {
+	passed, message := validatePutRequest(req)
+	if !passed {
+		http.Error(rw, message, 400)
+		return;
+	}
+
 	body, err := ioutil.ReadAll(req.Body)
 	s := string(body)
 	re := regexp.MustCompile(`[a-zA-Z0-9]+`)
 	taskArr := re.FindAllString(s, -1)
 	id, _ := strconv.Atoi(taskArr[1])
-	var taskId int64
+
+	var rows int64
 	go func() {
 		smallPool <- func() {
-			taskId, err = updateTask(Task{
+			rows, err = updateTask(Task{
 				id:  id,
 				title:  taskArr[3],
 				description: taskArr[5],
@@ -114,7 +196,11 @@ func putHandler(rw http.ResponseWriter, req *http.Request) {
 		}
 	}()
 	time.Sleep(2*time.Second)
-	json.NewEncoder(rw).Encode(taskId)
+	if(rows < 1) {
+		http.Error(rw, "Id doesn't exist", 400)
+		return;
+	}
+	json.NewEncoder(rw).Encode(rows)
 }
 
 func deleteHandler(rw http.ResponseWriter, req *http.Request) {
@@ -122,12 +208,22 @@ func deleteHandler(rw http.ResponseWriter, req *http.Request) {
 	query := req.URL.Query()
 	// convert string into int
 	id, _ := strconv.Atoi(query.Get("id"))
-	
+	if id < 0 {
+		http.Error(rw, "Id must be a valid number", 400)
+		return;
+	}
+	var rows int64
+
 	go func() {
-		deleteTask(id)
+		rows, _ = deleteTask(id)
 	}()
 
 	time.Sleep(2*time.Second)
+	if(rows < 1) {
+		http.Error(rw, "Id doesn't exist", 400)
+		return;
+	}
+		
 	rw.Write([]byte("successfully deleted!"))
 }
 func connectToDatabase() {
@@ -151,7 +247,7 @@ func connectToDatabase() {
         log.Fatal(pingErr)
     }
 
-    fmt.Println("Connected!")
+    fmt.Println("Connected To DB!")
 }
 
 func getTaskList() ([]Task, error) {

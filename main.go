@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"io/ioutil"
 	"regexp"
+	//"sync"
+	"time"
 )
 
 type Task struct {
@@ -20,97 +22,114 @@ type Task struct {
 	status string
 }
 var db *sql.DB
+var smallPool chan func()
 
 func main() {
 	fmt.Println("server is running")
 	connectToDatabase()
-	http.HandleFunc("/", func(rw http.ResponseWriter, req *http.Request) {
-        switch req.Method {
-			case "GET":
-				tasks, err := getTaskList()
-				if err != nil {
-					log.Fatal(err)
+	smallPool = make(chan func(), 20)
+	for i := 0; i < 20; i++ {
+		go func() {
+				for f := range smallPool {
+						f()
 				}
-				// json.NewEncoder(rw).Encode(tasks)	
-				rw.Write([]byte(fmt.Sprint(tasks)))				
-			case "POST":
-				body, err := ioutil.ReadAll(req.Body)
-				s := string(body)
-				re := regexp.MustCompile(`[a-zA-Z0-9]+`)
-				taskArr := re.FindAllString(s, -1)
-				taskId, err := addTask(Task{
-					 	title:  taskArr[1],
-					 	description: taskArr[3],
-					 	status:  taskArr[5],
-					 })
-				if err != nil {
-					log.Fatal(err)
-				}
-				json.NewEncoder(rw).Encode(taskId)
-			case "DELETE":				
-				// http://localhost:8000?id=1
-				query := req.URL.Query()
-				// convert string into int
-				id, _ := strconv.Atoi(query.Get("id"))
-				deleteTask(id)
-				
-				rw.Write([]byte("successfully deleted!"))
-			case "PUT":		
-				body, err := ioutil.ReadAll(req.Body)
-				s := string(body)
-				re := regexp.MustCompile(`[a-zA-Z0-9]+`)
-				taskArr := re.FindAllString(s, -1)
-				id, _ := strconv.Atoi(taskArr[1])
-				taskId, err := updateTask(Task{
-					id:  id,
-					title:  taskArr[3],
-					description: taskArr[5],
-					status:  taskArr[7],
-				})
-				if err != nil {
-					log.Fatal(err)
-				}
-				json.NewEncoder(rw).Encode(taskId)
-		}
-    })
-
-	task, err := getTaskById(2)
-	if err != nil {
-		log.Fatal(err)
+		}()
 	}
-	fmt.Println("Task:\n", task)
 
-	// taskId, err := addTask(Task{
-	// 	title:  "test1",
-	// 	description: "test",
-	// 	status:  "todo",
-	// })
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-	// fmt.Printf("ID of added task: %v\n", taskId)
 
-	rows2, err := updateTask(Task{
-		id:  6,
-		title:  "test33333",
-		description: "test233333",
-		status:  "todooo",
-	})
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Printf("Rows affected for Update: %v\n", rows2)
+	http.HandleFunc("/", getHandler)
+	http.HandleFunc("/addTask", postHandler)
+	http.HandleFunc("/updateTask", putHandler)
+	http.HandleFunc("/deleteTask", deleteHandler)
 
-	rows, err := deleteTask(5)
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Printf("Rows affected for Deletion: %v\n", rows)
-
-	
     log.Fatal(http.ListenAndServe(":8000", nil))
 }
 
+func getHandler(rw http.ResponseWriter, req *http.Request) {
+	fmt.Println("get Handler is working")
+	//wg := sync.WaitGroup{}
+	var tasks []Task
+	var err error
+	//wg.Add(1)
+	go func() {
+		smallPool <- func() {
+			tasks, err = getTaskList()
+			if err != nil {
+				log.Fatal(err)
+			}
+			// json.NewEncoder(rw).Encode(tasks)	
+			fmt.Println(tasks)			
+		}
+	}()
+	
+	time.Sleep(2*time.Second)
+	//wg.Wait()
+	rw.Write([]byte(fmt.Sprint(tasks)))			
+}
+
+func postHandler(rw http.ResponseWriter, req *http.Request) {
+	body, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		log.Fatal(err)
+	}
+	s := string(body)
+	re := regexp.MustCompile(`[a-zA-Z0-9]+`)
+	taskArr := re.FindAllString(s, -1)
+	var taskId int64
+	go func() {
+		smallPool <- func() {
+			taskId, err = addTask(Task{
+				title:  taskArr[1],
+				description: taskArr[3],
+				status:  taskArr[5],
+				})
+			if err != nil {
+				log.Fatal(err)
+			}
+		}
+	}()	
+
+	time.Sleep(2*time.Second)	
+	json.NewEncoder(rw).Encode(taskId)	
+}
+
+func putHandler(rw http.ResponseWriter, req *http.Request) {
+	body, err := ioutil.ReadAll(req.Body)
+	s := string(body)
+	re := regexp.MustCompile(`[a-zA-Z0-9]+`)
+	taskArr := re.FindAllString(s, -1)
+	id, _ := strconv.Atoi(taskArr[1])
+	var taskId int64
+	go func() {
+		smallPool <- func() {
+			taskId, err = updateTask(Task{
+				id:  id,
+				title:  taskArr[3],
+				description: taskArr[5],
+				status:  taskArr[7],
+			})
+			if err != nil {
+				log.Fatal(err)
+			}
+		}
+	}()
+	time.Sleep(2*time.Second)
+	json.NewEncoder(rw).Encode(taskId)
+}
+
+func deleteHandler(rw http.ResponseWriter, req *http.Request) {
+	// http://localhost:8000?id=1
+	query := req.URL.Query()
+	// convert string into int
+	id, _ := strconv.Atoi(query.Get("id"))
+	
+	go func() {
+		deleteTask(id)
+	}()
+
+	time.Sleep(2*time.Second)
+	rw.Write([]byte("successfully deleted!"))
+}
 func connectToDatabase() {
 	// Capture connection properties.
     cfg := mysql.Config{

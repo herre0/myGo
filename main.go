@@ -3,9 +3,9 @@ package main
 import (
 	"fmt"
 	"log"
+	"os"
 	"net/http"
 	"database/sql"
-    "os"
 	"github.com/go-sql-driver/mysql"
 	"encoding/json"
 	"strconv"
@@ -28,6 +28,25 @@ type Task struct {
 
 var db *sql.DB
 var smallPool chan func()
+
+var (
+    WarningLogger *log.Logger
+    InfoLogger    *log.Logger
+    ErrorLogger   *log.Logger
+)
+
+func init() {
+    file, err := os.OpenFile("logs.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    InfoLogger = log.New(file, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile)
+    WarningLogger = log.New(file, "WARNING: ", log.Ldate|log.Ltime|log.Lshortfile)
+    ErrorLogger = log.New(file, "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile)
+}
+
+
 //	@title			Task API
 //	@version		2.0
 //	@description	This is a sample api app 
@@ -35,7 +54,8 @@ var smallPool chan func()
 //	@host		localhost:8000
 //	@BasePath	
 func main() {
-	fmt.Println("server is running")
+	//log.SetOutput(file)
+	InfoLogger.Println("Starting the application...")    
 	connectToDatabase()
 	smallPool = make(chan func(), 20)
 	for i := 0; i < 20; i++ {
@@ -57,7 +77,7 @@ func main() {
 	// 	httpSwagger.URL("http://localhost:1323/swagger/doc.json"), //The url pointing to API definition
 	// ))
 	//r.Get("", )
-    log.Fatal(http.ListenAndServe(":8000", nil))
+    ErrorLogger.Fatal(http.ListenAndServe(":8000", nil))
 }
 
 
@@ -69,7 +89,6 @@ func main() {
 //	@Success		200
 //	@Router			/tasks [get]
 func getHandler(rw http.ResponseWriter, req *http.Request) {
-	fmt.Println("get Handler is working")
 	//wg := sync.WaitGroup{}
 	var tasks []Task
 	var err error
@@ -78,7 +97,7 @@ func getHandler(rw http.ResponseWriter, req *http.Request) {
 		smallPool <- func() {
 			tasks, err = getTaskList()
 			if err != nil {
-				log.Fatal(err)
+				ErrorLogger.Fatal(err)
 			}
 			// json.NewEncoder(rw).Encode(tasks)	
 			fmt.Println(tasks)			
@@ -146,7 +165,7 @@ func postHandler(rw http.ResponseWriter, req *http.Request) {
 				status:  taskArr[5],
 				})
 			if err != nil {
-				log.Fatal(err)
+				ErrorLogger.Fatal(err)
 			}
 		}
 	}()	
@@ -217,7 +236,7 @@ func putHandler(rw http.ResponseWriter, req *http.Request) {
 				status:  taskArr[7],
 			})
 			if err != nil {
-				log.Fatal(err)
+				ErrorLogger.Fatal(err)
 			}
 		}
 	}()
@@ -260,6 +279,7 @@ func deleteHandler(rw http.ResponseWriter, req *http.Request) {
 }
 func connectToDatabase() {
 	// Capture connection properties.
+	
     cfg := mysql.Config{
         User:   os.Getenv("DBUSER"),
         Passwd: os.Getenv("DBPASS"),
@@ -271,15 +291,15 @@ func connectToDatabase() {
     var err error
     db, err = sql.Open("mysql", cfg.FormatDSN())
     if err != nil {
-        log.Fatal(err)
+        ErrorLogger.Fatal(err)
     }
 
     pingErr := db.Ping()
     if pingErr != nil {
-        log.Fatal(pingErr)
+        ErrorLogger.Fatal(pingErr)
     }
 
-    fmt.Println("Connected To DB!")
+    InfoLogger.Println("Connected to DB")
 }
 
 func getTaskList() ([]Task, error) {
@@ -322,10 +342,12 @@ func getTaskList() ([]Task, error) {
 func addTask(task Task) (int64, error) {
     result, err := db.Exec("INSERT INTO task (title, description, status) VALUES (?, ?, ?)", task.title, task.description, task.status)
     if err != nil {
+		ErrorLogger.Println("addTask: %v", err)
         return 0, fmt.Errorf("addTask: %v", err)
     }
     id, err := result.LastInsertId()
     if err != nil {
+		ErrorLogger.Println("addTask: %v", err)
         return 0, fmt.Errorf("addTask: %v", err)
     }
     return id, nil
@@ -334,10 +356,12 @@ func addTask(task Task) (int64, error) {
 func updateTask(task Task) (int64, error) {
     result, err := db.Exec("Update task set title = ?, description = ?, status = ? where id = ?", task.title, task.description, task.status, task.id)
     if err != nil {
+		ErrorLogger.Println("updateTask: %v", err)
         return 0, fmt.Errorf("updateTask: %v", err)
     }
     rows, err := result.RowsAffected()
     if err != nil {
+		ErrorLogger.Println("updateTask: %v", err)
         return 0, fmt.Errorf("updateTask: %v", err)
     }
     return rows, nil    
@@ -351,11 +375,13 @@ func deleteTask(id int) (int64, error) {
 	}
     result, err := db.Exec("delete from task where id = ?", id)
     if err != nil {
+		ErrorLogger.Println("deleteTask: %v", err)
         return 0, fmt.Errorf("deleteTask: %v", err)
     }
     
     rows, err := result.RowsAffected()
     if err != nil {
+		ErrorLogger.Println("deleteTask: %v", err)
         return 0, fmt.Errorf("deleteTask: %v", err)
     }
     return rows, nil

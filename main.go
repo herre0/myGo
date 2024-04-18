@@ -25,6 +25,7 @@ type Task struct {
 	description string
 	status string
 }
+
 var db *sql.DB
 var smallPool chan func()
 //	@title			Task API
@@ -44,7 +45,6 @@ func main() {
 				}
 		}()
 	}
-
 
 	http.HandleFunc("/tasks", getHandler)
 	http.HandleFunc("/addTask", postHandler)
@@ -90,24 +90,15 @@ func getHandler(rw http.ResponseWriter, req *http.Request) {
 	rw.Write([]byte(fmt.Sprint(tasks)))			
 }
 
-func validatePostRequest(req *http.Request)(bool, string){
-	body, err := ioutil.ReadAll(req.Body)
-	if err != nil {
-		log.Fatal(err)
-		return false, "ERROR occured while reading the request body"
-	}	
-	
+func validatePostRequest(s string)(bool, string){
 	// TODO include all special characters with RegexP
-	s := string(body)
 	if(strings.Contains(s, "<") || strings.Contains(s, ">") || strings.Contains(s, "!") || strings.Contains(s, "=")|| strings.Contains(s, "#") || strings.Contains(s, "--")){
-		log.Fatal(err)
 		return false, "ERROR the json file cannot contain special characters"
 	}
 
 	re := regexp.MustCompile(`[a-zA-Z0-9]+`)
 	taskArr := re.FindAllString(s, -1)
 	if(len(taskArr) != 6){
-		log.Fatal(err)
 		return false, "ERROR the json file cannot be read"
 	}
 	title := taskArr[1]	
@@ -115,7 +106,6 @@ func validatePostRequest(req *http.Request)(bool, string){
 	status := taskArr[5]	
 
 	if(len(title) > 50 || len(description) > 50 || len(status) > 50){
-		log.Fatal(err)
 		return false, "ERROR the fields cannot exceed 50 characters"
 	}
 
@@ -130,15 +120,21 @@ func validatePostRequest(req *http.Request)(bool, string){
 //	@Success		200
 //	@Router			/addTask [POST]
 func postHandler(rw http.ResponseWriter, req *http.Request) {
-	passed, message := validatePostRequest(req)
+	body, err := ioutil.ReadAll(req.Body)
+	s := string(body)
+	if err != nil {
+		http.Error(rw, "ERROR occured while reading the request body", 400)
+		return;
+	}
+	
+	passed, message := validatePostRequest(s)
 	if !passed {
 		http.Error(rw, message, 400)
 		return;
 	}
 
-	body, err := ioutil.ReadAll(req.Body)
 	
-	s := string(body)
+
 	re := regexp.MustCompile(`[a-zA-Z0-9]+`)
 	taskArr := re.FindAllString(s, -1)
 	var taskId int64
@@ -159,24 +155,16 @@ func postHandler(rw http.ResponseWriter, req *http.Request) {
 	json.NewEncoder(rw).Encode(taskId)	
 }
 
-func validatePutRequest(req *http.Request)(bool, string){
-	body, err := ioutil.ReadAll(req.Body)
-	if err != nil {
-		log.Fatal(err)
-		return false, "ERROR occured while reading the request body"
-	}	
+func validatePutRequest(s string)(bool, string){
 	
 	// TODO include all special characters with RegexP
-	s := string(body)
-	if(strings.Contains(s, "<") || strings.Contains(s, ">") || strings.Contains(s, "!") || strings.Contains(s, "=")|| strings.Contains(s, "#") || strings.Contains(s, "--")){
-		log.Fatal(err)
+	if(strings.Contains(s, "<") || strings.Contains(s, ">") || strings.Contains(s, "!") || strings.Contains(s, "=")|| strings.Contains(s, "#") || strings.Contains(s, "	-")){
 		return false, "ERROR the json file cannot contain special characters"
 	}
 
 	re := regexp.MustCompile(`[a-zA-Z0-9]+`)
 	taskArr := re.FindAllString(s, -1)
 	if(len(taskArr) != 8){
-		log.Fatal(err)
 		return false, "ERROR the json file cannot be read"
 	}
 	id := taskArr[1]	
@@ -185,12 +173,10 @@ func validatePutRequest(req *http.Request)(bool, string){
 	status := taskArr[7]	
 
 	if _, err := strconv.Atoi(id); err != nil {
-		log.Fatal(err)
 		return false, "Id must be a valid number"
 	}
 
 	if(len(title) > 50 || len(description) > 50 || len(status) > 50){
-		log.Fatal(err)
 		return false, "ERROR the fields cannot exceed 50 characters"
 	}
 
@@ -204,14 +190,19 @@ func validatePutRequest(req *http.Request)(bool, string){
 //	@Success		200
 //	@Router			/updateTask [PUT]
 func putHandler(rw http.ResponseWriter, req *http.Request) {
-	passed, message := validatePutRequest(req)
+	body, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		http.Error(rw, "ERROR occured while reading the request body", 400)
+		return; 
+	}	
+
+	s := string(body)	
+	passed, message := validatePutRequest(s)
 	if !passed {
 		http.Error(rw, message, 400)
 		return;
 	}
-
-	body, err := ioutil.ReadAll(req.Body)
-	s := string(body)
+	
 	re := regexp.MustCompile(`[a-zA-Z0-9]+`)
 	taskArr := re.FindAllString(s, -1)
 	id, _ := strconv.Atoi(taskArr[1])
@@ -246,7 +237,6 @@ func putHandler(rw http.ResponseWriter, req *http.Request) {
 //	@Success		200
 //	@Router			/deleteTask [DELETE]
 func deleteHandler(rw http.ResponseWriter, req *http.Request) {
-	// http://localhost:8000?id=1
 	query := req.URL.Query()
 	// convert string into int
 	id, _ := strconv.Atoi(query.Get("id"))
@@ -316,18 +306,18 @@ func getTaskList() ([]Task, error) {
     return tasks, nil
 }
 
-func getTaskById(id int64) (Task, error) {
-    var task Task
+// func getTaskById(id int64) (Task, error) {
+//     var task Task
 
-    row := db.QueryRow("SELECT * FROM task WHERE id = ?", id)
-    if err := row.Scan(&task.id, &task.title, &task.description, &task.status); err != nil {
-        if err == sql.ErrNoRows {
-            return task, fmt.Errorf("getTaskById %d: no such a task", id)
-        }
-        return task, fmt.Errorf("getTaskById %d: %v", id, err)
-    }
-    return task, nil
-}
+//     row := db.QueryRow("SELECT * FROM task WHERE id = ?", id)
+//     if err := row.Scan(&task.id, &task.title, &task.description, &task.status); err != nil {
+//         if err == sql.ErrNoRows {
+//             return task, fmt.Errorf("getTaskById %d: no such a task", id)
+//         }
+//         return task, fmt.Errorf("getTaskById %d: %v", id, err)
+//     }
+//     return task, nil
+// }
 
 func addTask(task Task) (int64, error) {
     result, err := db.Exec("INSERT INTO task (title, description, status) VALUES (?, ?, ?)", task.title, task.description, task.status)
@@ -353,7 +343,12 @@ func updateTask(task Task) (int64, error) {
     return rows, nil    
 }
 
-func deleteTask(id int) (int64, error) {
+func deleteTask(id int) (int64, error) {	
+
+	if id < 0 {
+		fmt.Println("ID must be bigger than 0")
+		return 0, nil;
+	}
     result, err := db.Exec("delete from task where id = ?", id)
     if err != nil {
         return 0, fmt.Errorf("deleteTask: %v", err)

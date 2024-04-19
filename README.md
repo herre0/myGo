@@ -1,6 +1,7 @@
 Steps before run:<br>
-<code>
+
 1- MySql Db Conf:
+<code>
  CREATE DATABASE task;
 <br>
 CREATE TABLE task (
@@ -10,6 +11,6 @@ CREATE TABLE task (
   status VARCHAR(100)  
 );
 </code>
-2- Set environment variables:
-$ export DBUSER="yourMySqlUsername"
+2- Set environment variables:<br>
+$ export DBUSER="yourMySqlUsername" <br>
 $ export DBPASS="yourMySqlPassword"

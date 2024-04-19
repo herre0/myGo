@@ -67,6 +67,7 @@ func main() {
 	}
 
 	http.HandleFunc("/tasks", getHandler)
+	http.HandleFunc("/tasksByPage", getHandlerPagination)
 	http.HandleFunc("/addTask", postHandler)
 	http.HandleFunc("/updateTask", putHandler)
 	http.HandleFunc("/deleteTask", deleteHandler)
@@ -96,6 +97,29 @@ func getHandler(rw http.ResponseWriter, req *http.Request) {
 	go func() {
 		smallPool <- func() {
 			tasks, err = getTaskList()
+			if err != nil {
+				ErrorLogger.Fatal(err)
+			}
+			// json.NewEncoder(rw).Encode(tasks)	
+			fmt.Println(tasks)			
+		}
+	}()
+	
+	time.Sleep(2*time.Second)
+	//wg.Wait()
+	rw.Write([]byte(fmt.Sprint(tasks)))			
+}
+
+func getHandlerPagination(rw http.ResponseWriter, req *http.Request) {
+	query := req.URL.Query()
+	page, _ := strconv.Atoi(query.Get("page"))
+
+	var tasks []Task
+	var err error
+
+	go func() {
+		smallPool <- func() {
+			tasks, err = getTaskListPagination(page)
 			if err != nil {
 				ErrorLogger.Fatal(err)
 			}
@@ -312,6 +336,31 @@ func getTaskList() ([]Task, error) {
     }
     defer rows.Close()
     // Loop through rows, using Scan to assign column data to struct fields.
+    for rows.Next() {
+        var task Task
+        if err := rows.Scan(&task.id, &task.title, &task.description, &task.status); err != nil {
+            return nil, fmt.Errorf("An error occured: %v", err)
+        }
+        tasks = append(tasks, task)
+    }
+    if err := rows.Err(); err != nil {
+        return nil, fmt.Errorf("An error occured: %v", err)
+    }
+	
+    return tasks, nil
+}
+
+func getTaskListPagination(page int) ([]Task, error) {
+    var tasks []Task
+	limit := 5
+	offset := limit * (page-1) // 0*5=0, 1*5=5 ..
+	// avoids SQL Injection
+	sqlstmt := fmt.Sprintf("SELECT * FROM task limit %d offset %d", limit, offset)
+	rows, err := db.Query(sqlstmt)
+    if err != nil {
+        return nil, fmt.Errorf("An error occured: %v", err)
+    }
+    defer rows.Close()
     for rows.Next() {
         var task Task
         if err := rows.Scan(&task.id, &task.title, &task.description, &task.status); err != nil {
